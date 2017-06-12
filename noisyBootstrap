@@ -1,0 +1,116 @@
+import numpy as np
+import numpy.random as npr
+from scipy import stats
+import matplotlib.pyplot as plt
+
+def noisyBootstrap(
+              data_x, 
+              data_y,
+              noise_x,
+              noise_y,
+              kind='Spearman',
+              niterations=1):
+    
+    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic.
+    Ye be warned, this function assumes guassian noise"""
+    
+    n = len(data_x)
+
+    
+    corr_coeff_array = np.zeros(niterations)
+    
+    # Generate a whole set of random number in one go, for the noise perturbation
+    # Basically, a vectorized alternative to doing it once per iteration
+    
+    pert_x = npr.normal(loc=0.0, scale = 1.0, size = (n,niterations))
+    pert_y = npr.normal(loc=0.0, scale = 1.0, size = (n,niterations))
+    
+    # Now do the same thing for the boostrap grabbing:
+    
+    idx = npr.randint(0, n, size = (n,niterations))
+    print "idx :"+str(np.shape(idx))
+    #idy = npr.randint(0, n, size = (n,niterations))
+    
+    
+    for i in range(0,niterations):
+
+        noisy_x        = data_x.copy() #+ noise_x.copy()*pert_x[:,i].copy()
+        noisy_y        = data_y.copy() #+ noise_y.copy()*pert_y[:,i].copy()
+        samples_x      = data_x[idx[:,i]]
+        samples_y      = data_y[idx[:,i]]
+
+
+        if kind == 'Pearson':
+
+            stat_r, stat_p = scipy.stats.pearsonr(samples_x,samples_y,axis=0)
+            
+        elif kind == 'Spearman':
+            
+            stat_r, stat_p = scipy.stats.spearmanr(samples_x,samples_y,axis=0, nan_policy='omit')
+
+        corr_coeff_array[i] = stat_r
+    
+    corr_coeff_array[np.isnan(corr_coeff_array)==False]
+
+    return corr_coeff_array
+
+
+
+def noisyBootstrap_run(
+                  X1_data, 
+                  X2_data, 
+                  Y_data,
+                  X1_noise,
+                  X2_noise,
+                  Y_noise,
+                  kind='Spearman', 
+                  niterations=10000, 
+                  title=None, 
+                  X1_label=None, 
+                  X2_label=None,
+                  ftitle='Bootstrap' ):
+    
+        ## Force background color to be white:
+    ### Note that seaborn plotting functions my override these settings.
+    plt.rcParams['axes.facecolor']='white'
+    plt.rcParams['figure.facecolor']='white'
+    plt.rcParams['savefig.facecolor']='white'
+    
+    
+    corr_array_X1 = noisyBootstrap(X1_data, Y_data, X1_noise,Y_noise, kind=kind, niterations=niterations)
+
+    corr_array_X2 = noisyBootstrap(X2_data, Y_data, X2_noise,Y_noise, kind=kind, niterations=niterations)
+    
+    X1 = corr_array_X1
+    X2 = corr_array_X2
+    
+    X1 = X1[~np.isnan(X1)]
+    X2 = X2[~np.isnan(X2)]
+    
+    t, prob = scipy.stats.ttest_ind(X1,X2, axis=0, equal_var=True) #Equal_var=False for Welch's t-test
+    # make plots
+    
+    plt.figure(figsize=(6,6))
+
+    round_it = 2
+
+    bins = np.linspace(0.1, 1.0, 100)
+
+    plt.hist(X1, bins, alpha=0.5, color= 'r', label=X1_label +" "+ 
+                                           str(round(np.nanmean(X1),round_it)) + " +/- " +  
+                                           str(round(np.nanstd(X1),round_it)) )
+    plt.hist(X2, bins, alpha=0.5, color= 'b', label=X2_label+" "+ 
+                                           str(round(np.nanmean(X2),round_it)) + " +/- " +  
+                                           str(round(np.nanstd(X2),round_it))
+                                            + "\n" + "t-stat: "+ 
+                                                       str(round(t,1))+", p-value: "+   str(round(prob,5)))
+    plt.ylabel("Count", fontsize=20)
+    plt.xlabel("$S$", fontsize=20)
+    
+    
+    plt.legend(loc='upper left')
+    plt.savefig("../Plots/"+ftitle)
+    plt.show()
+
+
+    
